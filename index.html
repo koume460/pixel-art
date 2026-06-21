@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ピクセルアートエディタ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f0;
+    color: #1a1a1a;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #f0f0f0; }
+    .toolbar { background: #2a2a2a; border-color: #3a3a3a; }
+    button { background: #2a2a2a; border-color: #3a3a3a; color: #f0f0f0; }
+    button:hover { background: #3a3a3a; }
+    select { background: #2a2a2a; border-color: #3a3a3a; color: #f0f0f0; }
+    .label { color: #aaa; }
+    .divider { background: #3a3a3a; }
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 500;
+    margin-bottom: 16px;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+  }
+  button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  button:hover { background: #f0f0f0; }
+  button.active { background: #e8e0ff; border-color: #8b5cf6; color: #5b21b6; }
+  select {
+    font-size: 13px;
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .label { font-size: 13px; color: #666; }
+  .divider { width: 1px; height: 32px; background: #e0e0e0; flex-shrink: 0; }
+  .main {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  #canvas-wrap {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 120px;
+  }
+  .sidebar-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+  }
+  #palette {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    max-width: 620px;
+  }
+  .swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: transform 0.1s;
+    border: 2px solid transparent;
+  }
+  .swatch:hover { transform: scale(1.15); }
+  .swatch.selected { border-color: #1a1a1a; }
+  @media (prefers-color-scheme: dark) {
+    .swatch.selected { border-color: #fff; }
+  }
+  #current-swatch {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
+  input[type="color"] {
+    width: 44px;
+    height: 44px;
+    padding: 2px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+  }
+  #add-custom {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>ピクセルアートエディタ</h1>
+
+<div class="toolbar">
+  <div id="palette"></div>
+  <div class="divider"></div>
+  <button id="eraser-btn">✏️ 消しゴム</button>
+  <button id="fill-btn">🪣 塗りつぶし</button>
+  <button id="clear-btn">🗑 クリア</button>
+  <div class="divider"></div>
+  <span class="label">サイズ</span>
+  <select id="grid-size">
+    <option value="16">16×16</option>
+    <option value="24" selected>24×24</option>
+    <option value="32">32×32</option>
+    <option value="48">48×48</option>
+  </select>
+  <div class="divider"></div>
+  <button id="download-btn">⬇️ PNG保存</button>
+  <div class="divider"></div>
+  <button id="fuji-btn">🗻 富士山を描く</button>
+</div>
+
+<div class="main">
+  <div id="canvas-wrap">
+    <canvas id="grid-canvas"></canvas>
+  </div>
+  <div class="sidebar">
+    <div>
+      <p class="sidebar-label">現在の色</p>
+      <div id="current-swatch"></div>
+    </div>
+    <div>
+      <p class="sidebar-label">カスタム色</p>
+      <input type="color" id="custom-color" value="#e53e3e">
+      <button id="add-custom" style="margin-top:6px;">パレットに追加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = [
+  '#1a1a1a','#3a3a3a','#787878','#bcbcbc','#f0f0f0','#ffffff',
+  '#e53e3e','#dd6b20','#d69e2e','#38a169','#3182ce','#805ad5','#d53f8c',
+  '#fc8181','#f6ad55','#faf089','#9ae6b4','#90cdf4','#d6bcfa','#fed7e2',
+  '#c53030','#9c4221','#975a16','#276749','#2c5282','#553c9a','#97266d',
+];
+
+const canvas = document.getElementById('grid-canvas');
+const ctx = canvas.getContext('2d');
+let GRID = 24;
+let CELL = 20;
+let pixels = [];
+let painting = false;
+let mode = 'draw';
+let currentColor = COLORS[0];
+let colors = [...COLORS];
+
+function initPixels() {
+  pixels = Array.from({length: GRID}, () => Array(GRID).fill(null));
+}
+
+function resize() {
+  const maxSize = Math.min(window.innerWidth - 200, 600);
+  CELL = Math.max(8, Math.floor(maxSize / GRID));
+  const size = CELL * GRID;
+  canvas.width = size;
+  canvas.height = size;
+  draw();
+}
+
+function draw() {
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
+  const bgColor = isDark ? '#111' : '#f8f8f8';
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      if (pixels[r][c]) {
+        ctx.fillStyle = pixels[r][c];
+        ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+      }
+    }
+  }
+
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= GRID; i++) {
+    ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(canvas.width, i * CELL); ctx.stroke();
+  }
+}
+
+function getCell(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  let cx, cy;
+  if (e.touches) {
+    cx = (e.touches[0].clientX - rect.left) * scaleX;
+    cy = (e.touches[0].clientY - rect.top) * scaleY;
+  } else {
+    cx = (e.clientX - rect.left) * scaleX;
+    cy = (e.clientY - rect.top) * scaleY;
+  }
+  return [Math.floor(cy / CELL), Math.floor(cx / CELL)];
+}
+
+function paint(e) {
+  const [r, c] = getCell(e);
+  if (r < 0 || r >= GRID || c < 0 || c >= GRID) return;
+  if (mode === 'erase') { pixels[r][c] = null; }
+  else if (mode === 'fill') { floodFill(r, c, pixels[r][c], currentColor); mode = 'draw'; updateUI(); }
+  else { pixels[r][c] = currentColor; }
+  draw();
+}
+
+function floodFill(r, c, target, replacement) {
+  if (target === replacement) return;
+  const stack = [[r, c]];
+  const visited = new Set();
+  while (stack.length) {
+    const [cr, cc] = stack.pop();
+    const key = cr + ',' + cc;
+    if (visited.has(key)) continue;
+    if (cr < 0 || cr >= GRID || cc < 0 || cc >= GRID) continue;
+    if (pixels[cr][cc] !== target) continue;
+    visited.add(key);
+    pixels[cr][cc] = replacement;
+    stack.push([cr-1,cc],[cr+1,cc],[cr,cc-1],[cr,cc+1]);
+  }
+}
+
+canvas.addEventListener('mousedown', e => { painting = true; paint(e); });
+canvas.addEventListener('mousemove', e => { if (painting) paint(e); });
+canvas.addEventListener('mouseup', () => painting = false);
+canvas.addEventListener('mouseleave', () => painting = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); painting = true; paint(e); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if (painting) paint(e); }, {passive:false});
+canvas.addEventListener('touchend', () => painting = false);
+
+function renderPalette() {
+  const p = document.getElementById('palette');
+  p.innerHTML = '';
+  colors.forEach(col => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch' + (col === currentColor ? ' selected' : '');
+    sw.style.background = col;
+    sw.title = col;
+    sw.addEventListener('click', () => { currentColor = col; mode = 'draw'; updateUI(); });
+    p.appendChild(sw);
+  });
+}
+
+function updateUI() {
+  document.getElementById('current-swatch').style.background = currentColor;
+  document.getElementById('eraser-btn').className = mode === 'erase' ? 'active' : '';
+  document.getElementById('fill-btn').className = mode === 'fill' ? 'active' : '';
+  canvas.style.cursor = mode === 'erase' ? 'cell' : 'crosshair';
+  renderPalette();
+}
+
+document.getElementById('eraser-btn').addEventListener('click', () => {
+  mode = mode === 'erase' ? 'draw' : 'erase'; updateUI();
+});
+document.getElementById('fill-btn').addEventListener('click', () => {
+  mode = mode === 'fill' ? 'draw' : 'fill'; updateUI();
+});
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (confirm('キャンバスをクリアしますか？')) { initPixels(); draw(); }
+});
+document.getElementById('grid-size').addEventListener('change', e => {
+  if (pixels.some(row => row.some(c => c !== null))) {
+    if (!confirm('サイズを変更するとキャンバスがクリアされます。続けますか？')) {
+      e.target.value = GRID; return;
+    }
+  }
+  GRID = parseInt(e.target.value); initPixels(); resize();
+});
+document.getElementById('add-custom').addEventListener('click', () => {
+  const col = document.getElementById('custom-color').value;
+  if (!colors.includes(col)) colors.push(col);
+  currentColor = col; mode = 'draw'; updateUI();
+});
+document.getElementById('download-btn').addEventListener('click', () => {
+  const scale = 8;
+  const off = document.createElement('canvas');
+  off.width = GRID * scale; off.height = GRID * scale;
+  const octx = off.getContext('2d');
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, off.width, off.height);
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      if (pixels[r][c]) {
+        octx.fillStyle = pixels[r][c];
+        octx.fillRect(c * scale, r * scale, scale, scale);
+      }
+    }
+  }
+  const a = document.createElement('a');
+  a.download = 'pixel-art.png';
+  a.href = off.toDataURL(); a.click();
+});
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+window.addEventListener('resize', resize);
+
+document.getElementById('fuji-btn').addEventListener('click', () => {
+  initPixels();
+  GRID = 24;
+  document.getElementById('grid-size').value = '24';
+  resize();
+
+  const S = '#90cdf4'; // 空
+  const W = '#ffffff'; // 雪
+  const R = '#9e9e9e'; // 岩
+  const D = '#616161'; // 暗い岩
+  const G = '#66bb6a'; // 草
+  const B = '#a5d6a7'; // 薄草
+
+  const fuji = [
+    [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,S,S,S,W,S,S,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,S,S,W,W,W,S,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,S,W,W,W,W,W,S,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,S,W,W,W,W,W,W,R,S,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,S,W,W,W,W,W,R,R,R,R,S,S,S,S,S,S,S],
+    [S,S,S,S,S,S,S,W,W,W,R,R,R,R,R,D,R,R,S,S,S,S,S,S],
+    [S,S,S,S,S,S,W,W,R,R,R,R,D,D,D,D,R,R,R,S,S,S,S,S],
+    [S,S,S,S,S,W,W,R,R,D,D,D,D,D,D,D,D,R,R,R,S,S,S,S],
+    [S,S,S,S,W,W,R,R,D,D,D,D,D,D,D,D,D,D,R,R,R,S,S,S],
+    [S,S,S,W,W,R,R,D,D,D,D,D,D,D,D,D,D,D,D,R,R,R,S,S],
+    [S,S,W,R,R,R,D,D,D,D,D,D,D,D,D,D,D,D,D,D,R,R,R,S],
+    [S,R,R,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,R,R,R],
+    [R,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,R,R],
+    [D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,R],
+    [G,G,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,G,G],
+    [G,G,G,G,G,D,D,D,D,D,D,D,D,D,D,D,D,D,D,G,G,G,G,G],
+    [B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B],
+    [B,B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B,B],
+    [B,B,B,B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B,B,B,B],
+    [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+    [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  ];
+
+  for (let r = 0; r < 24; r++) {
+    for (let c = 0; c < 24; c++) {
+      pixels[r][c] = fuji[r][c];
+    }
+  }
+  draw();
+});
+
+initPixels();
+resize();
+updateUI();
+</script>
+</body>
+</html>
